@@ -58,6 +58,7 @@ from .tuners import (
     VeraModel,
     XLoraConfig,
     XLoraModel,
+    LoraGAModel,
 )
 from .tuners.tuners_utils import BaseTuner, BaseTunerLayer
 from .utils import (
@@ -80,6 +81,7 @@ from .utils import (
 
 
 PEFT_TYPE_TO_MODEL_MAPPING = {
+    PeftType.LORAGA: LoraGAModel,
     PeftType.LORA: LoraModel,
     PeftType.LOHA: LoHaModel,
     PeftType.LOKR: LoKrModel,

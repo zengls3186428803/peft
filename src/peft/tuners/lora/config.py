@@ -24,6 +24,27 @@ from peft.utils import PeftType
 
 
 @dataclass
+class LoraGAConfig:
+    bsz: int = field(default=2, metadata={"help": "batch size of estimate gradient for Lora-GA"})
+    iters: int = field(
+        default=64,
+    )
+    direction: str = field(
+        default="ArB2r",
+    )
+    max_length: str = field(
+        default=1024,
+    )
+    dtype: str = field(
+        default="fp32",
+    )
+    scale: str = field(default="stable")
+    stable_gamma: int = field(
+        default=16,
+    )
+
+
+@dataclass
 class LoraRuntimeConfig:
     """
     This is the sub-configuration class to store the runtime configurations for the model.
@@ -112,7 +133,7 @@ class LoraConfig(PeftConfig):
             PiSSA reduces the quantization error compared to QLoRA, leading to further enhancements. Passing
             `'pissa_niter_[number of iters]'` initiates Fast-SVD-based PiSSA initialization, where `[number of iters]`
             indicates the number of subspace iterations to perform FSVD, and must be a nonnegative integer. When
-            `[number of iters]` is set to 16, it can complete the initialization of a 7B model within seconds, and the
+            `[number of iters]` is set to ,, it can complete the initialization of a 7B model within seconds, and the
             training effect is approximately equivalent to using SVD.
         layers_to_transform (`Union[List[int], int]`):
             The layer indices to transform. If a list of ints is passed, it will apply the adapter to the layer indices
@@ -276,6 +297,9 @@ class LoraConfig(PeftConfig):
                 "weights and initialize Lora layers. Also set `init_lora_weights='loftq'` in this case."
             )
         },
+    )
+    lora_ga_config: Union[LoraGAConfig, dict] = field(
+        default_factory=dict,
     )
     use_dora: bool = field(
         default=False,

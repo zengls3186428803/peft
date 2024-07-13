@@ -126,6 +126,9 @@ class LoraLayer(BaseTunerLayer):
         if isinstance(init_lora_weights, str) and init_lora_weights.startswith("pissa"):
             with gather_params_ctx(self.get_base_layer().weight):
                 self.pissa_init(adapter_name, init_lora_weights)
+        if isinstance(init_lora_weights, str) and init_lora_weights.startswith("lora_ga"):
+            with gather_params_ctx(self.get_base_layer().weight):
+                self.lora_ga_init(adapter_name, init_lora_weights)
         elif isinstance(init_lora_weights, str) and init_lora_weights.lower() == "olora":
             with gather_params_ctx(self.get_base_layer().weight):
                 self.olora_init(adapter_name)
@@ -164,6 +167,114 @@ class LoraLayer(BaseTunerLayer):
             # https://github.com/microsoft/LoRA/blob/4c0333854cb905966f8cc4e9a74068c1e507c7b7/loralib/layers.py#L59-L60
             nn.init.zeros_(self.lora_embedding_A[adapter_name])
             nn.init.normal_(self.lora_embedding_B[adapter_name])
+
+    def lora_ga_init(self, adapter_name, init_lora_weights):
+        base_layer = self.get_base_layer()
+        weight = self.get_base_layer().weight
+        # print(f"type(self.get_base_layer())={type(self.get_base_layer())}")
+        device = weight.device
+        dtype = weight.dtype
+        quant_flag = False
+        if dtype not in [torch.float32, torch.float16, torch.bfloat16]:
+            # print("quant_flag")
+            quant_flag = True
+            with torch.no_grad():
+                I = torch.eye(base_layer.in_features, device=device)
+                weight = base_layer(I)
+                if base_layer.bias is not None and isinstance(base_layer.bias, torch.Tensor):
+                    weight -= base_layer.bias
+                weight = torch.transpose(weight, 0, 1)
+            dtype = weight.dtype
+        grad = self.kwargs["grad"].to(device).to(torch.float32)
+        weight = weight.to(torch.float32)
+        lora_r = self.r[adapter_name]
+        init_config = self.kwargs["lora_ga_config"]
+        try:
+            U, S, V = torch.svd_lowrank(
+                grad.float(), q=min(4 * lora_r, min(grad.shape)),
+                niter=4
+            )
+            V = V.T
+        except Exception as e:
+            raise ValueError("error from torch.svd_lowrank")
+        # set direction
+        if init_config.direction == "ArBr":
+            B = U[:, 0: 2 * lora_r: 2]
+            A = V[1: 2 * lora_r: 2, :]
+        elif init_config.direction == "A2rBr":
+            B = U[:, :lora_r]
+            A = V[lora_r: 2 * lora_r, :]
+        elif init_config.direction == "ArB2r":
+            B = U[:, lora_r: 2 * lora_r]
+            A = V[:lora_r, :]
+        scaling_factor = self.scaling["default"]
+        if init_config.scale == "gd":
+            A = A / scaling_factor
+            B = B / scaling_factor
+        elif init_config.scale == "unit":
+            # Because A,B is orthogonal, do not need to scale
+            pass
+        elif init_config.scale == "stable":
+            m, n = grad.shape  # m: feature_out, n: feature_in
+            # the scale of output is only related to the feature_out
+            gamma = init_config.stable_gamma
+            B = B * m ** 0.25 / gamma ** 0.5
+            A = A * m ** 0.25 / gamma ** 0.5
+        elif init_config.scale == "weightS":
+            _, S, _ = torch.svd_lowrank(weight.data.float(), q=4 * lora_r, niter=4)
+            S = S / self.scaling["default"]
+            avg_s = torch.sqrt(S[:lora_r]).mean().to(A.device)
+            B = B * avg_s
+            A = A * avg_s
+
+        offset = B @ A
+        # Training type
+        # consider dtype not in init_config
+        if not hasattr(init_config, "dtype"):
+            pass
+        elif init_config.dtype == "bf16":
+            A = A.to(torch.bfloat16)
+            B = B.to(torch.bfloat16)
+        elif init_config.dtype == "fp32":
+            A = A.to(torch.float32)
+            B = B.to(torch.float32)
+        scaling_factor = self.scaling["default"]
+        offset *= scaling_factor
+        if hasattr(init_config, "norm_clip") and init_config.norm_clip:
+            # for numerical stability, offset's largest value must be less then weight's largest value
+            ratio = torch.max(torch.abs(weight.data)) / torch.max(
+                torch.abs(offset)
+            )
+            if ratio < 1:
+                offset *= ratio
+                A *= ratio ** 0.5
+                B *= ratio ** 0.5
+        # print(f"weight.data.shpe={weight.data.shape},offset.shape={offset.shape},weight={weight},weight.data={weight.data}")
+
+        weight.data -= offset
+
+        self.lora_A[adapter_name].weight.data = A.contiguous()
+        self.lora_B[adapter_name].weight.data = B.contiguous()
+        if not quant_flag:
+            weight = weight.data
+            weight = weight.to(dtype)
+            self.get_base_layer().weight.data = weight
+        else:
+            has_bias = True if base_layer.bias is not None else False
+            float_linear = torch.nn.Linear(base_layer.in_features, base_layer.out_features, has_bias)
+            if has_bias and isinstance(base_layer.bias.data, torch.Tensor):
+                float_linear.bias.data = base_layer.bias.data
+            float_linear.weight.data = weight.data
+            import bitsandbytes
+            if isinstance(base_layer, bitsandbytes.nn.Linear8bitLt):
+                new_base_layer = type(base_layer)(base_layer.in_features, base_layer.out_features, has_bias,
+                                                  has_fp16_weights=False)
+            else:
+                new_base_layer = type(base_layer)(base_layer.in_features, base_layer.out_features, has_bias, )
+            new_base_layer.load_state_dict(float_linear.state_dict())
+            new_base_layer.to(device)
+            base_layer.__dict__.update(new_base_layer.__dict__)
+            del new_base_layer
 
     def olora_init(self, adapter_name):
         dtype = self.get_base_layer().weight.dtype

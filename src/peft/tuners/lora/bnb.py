@@ -44,7 +44,7 @@ if is_bnb_available():
             **kwargs,
         ) -> None:
             super().__init__()
-            LoraLayer.__init__(self, base_layer)
+            LoraLayer.__init__(self, base_layer, **kwargs)
             self.fan_in_fan_out = False
 
             self._active_adapter = adapter_name
@@ -297,7 +297,7 @@ if is_bnb_4bit_available():
             **kwargs,
         ) -> None:
             super().__init__()
-            LoraLayer.__init__(self, base_layer)
+            LoraLayer.__init__(self, base_layer, **kwargs)
             self.fan_in_fan_out = False
 
             self._active_adapter = adapter_name

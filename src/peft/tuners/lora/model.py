@@ -908,3 +908,82 @@ class LoraModel(BaseTuner):
                 )
 
         return tensors_lora
+    
+
+
+class LoraGAModel(LoraModel):
+    def __init__(self, model, config, adapter_name):
+        named_grad_key = "named_grad"
+        assert (hasattr(model, named_grad_key)
+                and getattr(model, named_grad_key) is not None), "no named_grad is specified"
+        self.named_grad = model.named_grad
+        model.named_grad = None
+        super().__init__(model, config, adapter_name)
+        self.named_grad = None
+
+    def _create_and_replace(
+            self,
+            lora_config,
+            adapter_name,
+            target,
+            target_name,
+            parent,
+            current_key,
+    ):
+        if current_key is None:
+            raise ValueError("Current Key shouldn't be `None`")
+        # Regexp matching - Find key which matches current target_name in patterns provided
+        pattern_keys = list(chain(lora_config.rank_pattern.keys(), lora_config.alpha_pattern.keys()))
+        target_name_key = next(filter(lambda key: re.match(rf".*\.{key}$", current_key), pattern_keys), current_key)
+        r = lora_config.rank_pattern.get(target_name_key, lora_config.r)
+        alpha = lora_config.alpha_pattern.get(target_name_key, lora_config.lora_alpha)
+
+        kwargs = {
+            "r": r,
+            "lora_alpha": alpha,
+            "lora_dropout": lora_config.lora_dropout,
+            "fan_in_fan_out": lora_config.fan_in_fan_out,
+            "init_lora_weights": lora_config.init_lora_weights,
+            "use_rslora": lora_config.use_rslora,
+            "use_dora": lora_config.use_dora,
+            "ephemeral_gpu_offload": lora_config.runtime_config.ephemeral_gpu_offload,
+            "loaded_in_8bit": getattr(self.model, "is_loaded_in_8bit", False),
+            "loaded_in_4bit": getattr(self.model, "is_loaded_in_4bit", False),
+        }
+        if (lora_config.init_lora_weights == "lora_ga"
+                and hasattr(self.peft_config[adapter_name], "lora_ga_config")
+                and getattr(self.peft_config[adapter_name], "lora_ga_config", None) is not None):
+            kwargs.update(
+                {
+                    "lora_ga_config": self.peft_config[adapter_name].lora_ga_config,
+                    "grad": self.named_grad[current_key]
+                }
+            )
+        # print(f"kwargs={kwargs}")
+
+        quant_methods = ["gptq", "aqlm", "awq"]
+        for quant_method in quant_methods:
+            quantization_config = get_quantization_config(self.model, method=quant_method)
+            if quantization_config is not None:
+                kwargs[f"{quant_method}_quantization_config"] = quantization_config
+
+        # note: AdaLoraLayer is a subclass of LoraLayer, we need to exclude it
+        from peft.tuners.adalora import AdaLoraLayer
+
+        if isinstance(target, LoraLayer) and not isinstance(target, AdaLoraLayer):
+            target.update_layer(
+                adapter_name,
+                r,
+                lora_alpha=alpha,
+                lora_dropout=lora_config.lora_dropout,
+                init_lora_weights=lora_config.init_lora_weights,
+                use_rslora=lora_config.use_rslora,
+                use_dora=lora_config.use_dora,
+            )
+        else:
+            new_module = self._create_new_module(lora_config, adapter_name, target, **kwargs)
+            if adapter_name not in self.active_adapters:
+                # adding an additional adapter: it is not automatically trainable
+                new_module.requires_grad_(False)
+            self._replace_module(parent, target_name, new_module, target)
+
