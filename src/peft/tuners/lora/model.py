@@ -959,7 +959,6 @@ class LoraGAModel(LoraModel):
                     "grad": self.named_grad[current_key]
                 }
             )
-        # print(f"kwargs={kwargs}")
 
         quant_methods = ["gptq", "aqlm", "awq"]
         for quant_method in quant_methods:

@@ -27,7 +27,7 @@ from peft.utils import PeftType
 class LoraGAConfig:
     bsz: int = field(default=2, metadata={"help": "batch size of estimate gradient for Lora-GA"})
     iters: int = field(
-        default=64,
+        default=2,
     )
     direction: str = field(
         default="ArB2r",
@@ -214,7 +214,7 @@ class LoraConfig(PeftConfig):
             "the final layer `classifier/score` are randomly initialized and as such need to be trainable and saved."
         },
     )
-    init_lora_weights: bool | Literal["gaussian", "olora", "pissa", "pissa_niter_[number of iters]", "loftq"] = field(
+    init_lora_weights: bool | Literal["gaussian", "olora", "pissa", "pissa_niter_[number of iters]", "loftq", "lora_ga"] = field(
         default=True,
         metadata={
             "help": (
