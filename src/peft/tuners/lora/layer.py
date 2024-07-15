@@ -171,13 +171,10 @@ class LoraLayer(BaseTunerLayer):
     def lora_ga_init(self, adapter_name, init_lora_weights):
         base_layer = self.get_base_layer()
         weight = self.get_base_layer().weight
-        # print(f"type(self.get_base_layer())={type(self.get_base_layer())}")
         device = weight.device
         dtype = weight.dtype
         quant_flag = False
-        # print(f"lora_ga_init,dtype={dtype}, should quant forward for get float model")
         if dtype not in [torch.float32, torch.float16, torch.bfloat16]:
-            # print("quant_flag")
             quant_flag = True
             with torch.no_grad():
                 I = torch.eye(base_layer.in_features, device=device)
@@ -189,7 +186,7 @@ class LoraLayer(BaseTunerLayer):
         grad = self.kwargs["grad"].to(device).to(torch.float32)
         weight = weight.to(torch.float32)
         lora_r = self.r[adapter_name]
-        init_config = self.kwargs["lora_ga_config"]
+        init_config = self.kwargs["peft_config"]
         try:
             U, S, V = torch.svd_lowrank(
                 grad.float(), q=min(4 * lora_r, min(grad.shape)),

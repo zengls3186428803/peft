@@ -23,26 +23,6 @@ from peft.config import PeftConfig
 from peft.utils import PeftType
 
 
-@dataclass
-class LoraGAConfig:
-    bsz: int = field(default=2, metadata={"help": "batch size of estimate gradient for Lora-GA"})
-    iters: int = field(
-        default=2,
-    )
-    direction: str = field(
-        default="ArB2r",
-    )
-    max_length: str = field(
-        default=1024,
-    )
-    dtype: str = field(
-        default="fp32",
-    )
-    scale: str = field(default="stable")
-    stable_gamma: int = field(
-        default=16,
-    )
-
 
 @dataclass
 class LoraRuntimeConfig:
@@ -394,3 +374,31 @@ class LoraConfig(PeftConfig):
         if self._custom_modules is None:
             self._custom_modules = {}
         self._custom_modules.update(mapping)
+
+
+@dataclass
+class LoraGAConfig(LoraConfig):
+    bsz: int = field(
+        default=2, metadata={"help": "batch size of estimate gradient for Lora-GA"}
+    )
+    iters: int = field(
+        default=2,
+    )
+    direction: str = field(
+        default="ArB2r",
+    )
+    max_length: str = field(
+        default=1024,
+    )
+    dtype: str = field(
+        default="fp32",
+    )
+    scale: str = field(default="stable")
+    stable_gamma: int = field(
+        default=16,
+    )
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.peft_type = PeftType.LORAGA
+        self.init_lora_weights = "lora_ga"

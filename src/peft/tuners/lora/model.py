@@ -955,7 +955,7 @@ class LoraGAModel(LoraModel):
                 and getattr(self.peft_config[adapter_name], "lora_ga_config", None) is not None):
             kwargs.update(
                 {
-                    "lora_ga_config": self.peft_config[adapter_name].lora_ga_config,
+                    "peft_config": self.peft_config[adapter_name],
                     "grad": self.named_grad[current_key]
                 }
             )
