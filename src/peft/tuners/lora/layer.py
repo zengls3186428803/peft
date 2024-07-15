@@ -175,6 +175,7 @@ class LoraLayer(BaseTunerLayer):
         device = weight.device
         dtype = weight.dtype
         quant_flag = False
+        # print(f"lora_ga_init,dtype={dtype}, should quant forward for get float model")
         if dtype not in [torch.float32, torch.float16, torch.bfloat16]:
             # print("quant_flag")
             quant_flag = True
