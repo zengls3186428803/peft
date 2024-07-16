@@ -60,6 +60,8 @@ For detailed instruction on using PiSSA, please follow [these instructions](http
 
 Configure the initialization method to "lora_ga" by using LoraGAConfig, then get estimated_grad, and get peft model with LoraGAContext:
 ```python
+from peft import LoraGAConfig
+from peft.utils.lora_ga_utils import estimate_gradient, LoraGAContext
 peft_config = LoraGAConfig()
 # model should be float(such as bf16) model
 named_grad = estimate_gradient(
