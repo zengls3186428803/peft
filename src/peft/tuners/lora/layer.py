@@ -128,7 +128,7 @@ class LoraLayer(BaseTunerLayer):
                 self.pissa_init(adapter_name, init_lora_weights)
         if isinstance(init_lora_weights, str) and init_lora_weights.startswith("lora_ga"):
             with gather_params_ctx(self.get_base_layer().weight):
-                self.lora_ga_init(adapter_name, init_lora_weights)
+                self.lora_ga_init(adapter_name)
         elif isinstance(init_lora_weights, str) and init_lora_weights.lower() == "olora":
             with gather_params_ctx(self.get_base_layer().weight):
                 self.olora_init(adapter_name)
@@ -168,13 +168,17 @@ class LoraLayer(BaseTunerLayer):
             nn.init.zeros_(self.lora_embedding_A[adapter_name])
             nn.init.normal_(self.lora_embedding_B[adapter_name])
 
-    def lora_ga_init(self, adapter_name, init_lora_weights):
+    def lora_ga_init(self, adapter_name):
         base_layer = self.get_base_layer()
         weight = self.get_base_layer().weight
         device = weight.device
         dtype = weight.dtype
         quant_flag = False
         if dtype not in [torch.float32, torch.float16, torch.bfloat16]:
+            """
+            for quantized model, it is needed to get the floating point weights through forward, 
+            which may take 1-2 minutes (7bmodel, all linear)
+            """
             quant_flag = True
             with torch.no_grad():
                 I = torch.eye(base_layer.in_features, device=device)
@@ -247,7 +251,6 @@ class LoraLayer(BaseTunerLayer):
                 offset *= ratio
                 A *= ratio ** 0.5
                 B *= ratio ** 0.5
-        # print(f"weight.data.shpe={weight.data.shape},offset.shape={offset.shape},weight={weight},weight.data={weight.data}")
 
         weight.data -= offset
 

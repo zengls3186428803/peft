@@ -3,7 +3,6 @@ from accelerate import Accelerator
 import torch
 from tqdm import tqdm
 import torch.distributed as dist
-from peft import LoraGAConfig, LoraConfig
 
 
 def get_record_gradient_hook(model, record_dict):
@@ -27,6 +26,7 @@ def estimate_gradient(
     quant_flag=False,
     origin_type="bf16",
     quant_type="nf4",
+    no_split_module_classes=None,
 ) -> Dict[str, List[torch.Tensor]]:
     r"""
     Estimate the gradient of the model on the given dataset
@@ -40,8 +40,8 @@ def estimate_gradient(
         dataloader = accelerator.prepare(dataloader)
     named_grads = {}
     num_batch = 0
-    from offload_utils_for_quant.resource_monitor import show_gpu_and_cpu_memory
-    from offload_utils_for_quant.context import OffloadContext
+    from .offload_utils_for_quant import show_gpu_and_cpu_memory
+    from .offload_utils_for_quant import OffloadContext
 
     with OffloadContext(
         model=model,
@@ -49,6 +49,7 @@ def estimate_gradient(
         quant_flag=quant_flag,
         origin_type=origin_type,
         quant_type=quant_type,
+        no_split_module_classes=no_split_module_classes,
     ):
         for batch in tqdm(dataloader, desc="Estimating gradient"):
             print(f"batch_size=", len(batch["input_ids"]))

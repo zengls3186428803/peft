@@ -54,6 +54,33 @@ lora_config = LoraConfig(init_lora_weights="pissa_niter_[number of iters]", ...)
 ```
 For detailed instruction on using PiSSA, please follow [these instructions](https://github.com/fxmeng/peft/tree/main/examples/pissa_finetuning).
 
+
+### LoRA-GA
+[LoRA-GA](https://arxiv.org/abs/2407.05000v1) aligns the gradients of low-rank matrix product with those of full fine-tuning at the first step. Our extensive experiments demonstrate that LoRA-GA achieves a convergence rate comparable to that of full fine-tuning (hence being significantly faster than vanilla LoRA as well as various recent improvements) while simultaneously attaining comparable or even better performance. 
+
+Configure the initialization method to "lora_ga" by using LoraGAConfig, then get estimated_grad, and get peft model with LoraGAContext:
+```python
+peft_config = LoraGAConfig()
+# model should be float(such as bf16) model
+named_grad = estimate_gradient(
+    model=model,
+    dataloader=dataloader,
+    accelerator=accelerator,
+    quant_flag=False,
+)
+"""
+if you want to use quantized model:
+    you can set quant_flag=Ture to Reduce GPU memory usage during gradient estimation. 
+    re-get your quantizied model here.
+"""
+with LoraGAContext(model=model, named_grad=named_grad):
+    print(peft_config)
+    get_peft_model(model=model, peft_config=peft_config, adapter_name="default")
+```
+For detailed usage, please refer to [detail usage](../../../examples/lora_ga_finetuning/README.md)
+
+
+
 ### OLoRA
 [OLoRA](https://arxiv.org/abs/2406.01775) utilizes QR decomposition to initialize the LoRA adapters. OLoRA translates the base weights of the model by a factor of their QR decompositions, i.e., it mutates the weights before performing any training on them. This approach significantly improves stability, accelerates convergence speed, and ultimately achieves superior performance.
 
