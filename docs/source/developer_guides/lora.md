@@ -56,7 +56,7 @@ For detailed instruction on using PiSSA, please follow [these instructions](http
 
 
 ### LoRA-GA
-[LoRA-GA](https://arxiv.org/abs/2407.05000v1) aligns the gradients of low-rank matrix product with those of full fine-tuning at the first step. Our extensive experiments demonstrate that LoRA-GA achieves a convergence rate comparable to that of full fine-tuning (hence being significantly faster than vanilla LoRA as well as various recent improvements) while simultaneously attaining comparable or even better performance. 
+[LoRA-GA](https://arxiv.org/abs/2407.05000) aligns the gradients of low-rank matrix product with those of full fine-tuning at the first step. Our extensive experiments demonstrate that LoRA-GA achieves a convergence rate comparable to that of full fine-tuning (hence being significantly faster than vanilla LoRA as well as various recent improvements) while simultaneously attaining comparable or even better performance. 
 
 Configure the initialization method to "lora_ga" by using LoraGAConfig, then get estimated_grad, and get peft model with LoraGAContext:
 ```python

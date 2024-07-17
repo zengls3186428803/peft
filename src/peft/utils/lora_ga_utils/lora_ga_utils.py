@@ -85,6 +85,10 @@ def estimate_gradient(
 
 
 class LoraGAContext:
+    """
+    Attach named_grad to the model as an attribute of the model
+    """
+
     def __init__(
         self,
         model: torch.nn.Module,
