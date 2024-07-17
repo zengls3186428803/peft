@@ -64,7 +64,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 ```
 
 ## for quantized model
@@ -181,14 +180,15 @@ for i in range(K-1, -1, -1):
 ```
 
 ## Citation
+
 ```
 @misc{wang2024loragalowrankadaptationgradient,
-      title={LoRA-GA: Low-Rank Adaptation with Gradient Approximation}, 
+      title={LoRA-GA: Low-Rank Adaptation with Gradient Approximation},
       author={Shaowen Wang and Linxi Yu and Jian Li},
       year={2024},
       eprint={2407.05000},
       archivePrefix={arXiv},
       primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2407.05000}, 
+      url={https://arxiv.org/abs/2407.05000},
 }
 ```
