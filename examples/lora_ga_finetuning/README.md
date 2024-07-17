@@ -1,5 +1,11 @@
 # LoRA-GA: Low-Rank Adaptation with Gradient Approximation
 
+- [LoRA-GA: Low-Rank Adaptation with Gradient Approximation](#lora-ga-low-rank-adaptation-with-gradient-approximation)
+  - [introduction paper,code](#introduction-papercode)
+  - [quick start](#quick-start)
+  - [for quantized model](#for-quantized-model)
+  - [Citation](#citation)
+
 ## introduction [paper](https://arxiv.org/abs/2407.05000),[code](https://github.com/Outsider565/LoRA-GA)
 
 [LoRA-GA](https://arxiv.org/abs/2407.05000) aligns the gradients of low-rank matrix product with those of full fine-tuning at the first step. Our extensive experiments demonstrate that LoRA-GA achieves a convergence rate comparable to that of full fine-tuning (hence being significantly faster than vanilla LoRA as well as various recent improvements) while simultaneously attaining comparable or even better performance.
@@ -172,4 +178,17 @@ for i in range(K-1, -1, -1):
     else：
         # If it is block 0, since the forward of the next batch first requires block 0 to be forwarded, no offload
         do nothing
+```
+
+## Citation
+```
+@misc{wang2024loragalowrankadaptationgradient,
+      title={LoRA-GA: Low-Rank Adaptation with Gradient Approximation}, 
+      author={Shaowen Wang and Linxi Yu and Jian Li},
+      year={2024},
+      eprint={2407.05000},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2407.05000}, 
+}
 ```
