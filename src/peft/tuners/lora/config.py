@@ -278,9 +278,6 @@ class LoraConfig(PeftConfig):
             )
         },
     )
-    lora_ga_config: Union[LoraGAConfig, dict] = field(
-        default_factory=dict,
-    )
     use_dora: bool = field(
         default=False,
         metadata={
@@ -379,7 +376,7 @@ class LoraConfig(PeftConfig):
 @dataclass
 class LoraGAConfig(LoraConfig):
     bsz: int = field(
-        default=2, metadata={"help": "batch size of estimate gradient for Lora-GA"}
+        default=2,
     )
     iters: int = field(
         default=2,
