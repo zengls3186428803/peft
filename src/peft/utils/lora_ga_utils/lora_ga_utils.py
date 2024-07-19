@@ -3,6 +3,7 @@ from accelerate import Accelerator
 import torch
 from tqdm import tqdm
 import torch.distributed as dist
+from peft import PeftModel
 
 
 def get_record_gradient_hook(model, record_dict):
@@ -82,6 +83,70 @@ def estimate_gradient(
             processed_gradient = processed_gradient.to("cpu")
     named_grads = {".".join(k.split(".")[:-1]): v for k, v in named_grads.items()}
     return named_grads
+
+
+def save_peft_model_first(model: PeftModel, save_dir: str):
+    import os
+    import json
+
+    init_suffix = "_init_lora_checkpoint"
+    save_dir = os.path.join(save_dir, init_suffix)
+    model.save_pretrained(save_dir)
+    adapter_config = json.load(open(os.path.join(save_dir, "adapter_config.json")))
+    adapter_config["lora_alpha"] = adapter_config["lora_alpha"]
+    print(adapter_config)
+    json.dump(adapter_config, open(os.path.join(save_dir, "adapter_config.json"), "w"))
+
+
+def save_peft_model_second(model: PeftModel, save_dir: str):
+    import os
+    import json
+
+    final_suffix = "_final_lora_checkpoint"
+    save_dir = os.path.join(save_dir, final_suffix)
+    model.save_pretrained(save_dir)
+    adapter_config = json.load(open(os.path.join(save_dir, "adapter_config.json")))
+    adapter_config["lora_alpha"] = adapter_config["lora_alpha"]
+    print(adapter_config)
+    json.dump(adapter_config, open(os.path.join(save_dir, "adapter_config.json"), "w"))
+
+
+def load_peft_model(model: torch.nn.Module, save_dir: str, adapter_name=None):
+    import os
+
+    init_suffix = "_init_lora_checkpoint"
+    final_suffix = "_final_lora_checkpoint"
+    merged_suffix = "merged_checkpoint"
+    if adapter_name == None:
+        adapter_name = "default"
+    save_dirs = [f"{save_dir}/{i}" for i in os.listdir(save_dir) if merged_suffix not in i]
+    for save_dir in save_dirs:
+        dir_name = os.path.split(save_dir)[-1]
+        if dir_name == init_suffix:
+            tmp_adapter_name = dir_name
+        elif dir_name == final_suffix:
+            tmp_adapter_name = adapter_name
+        else:
+            continue
+        print(f"loading and from {save_dir}, adapter_name={tmp_adapter_name}")
+        model: PeftModel = PeftModel.from_pretrained(model, save_dir, adapter_name=tmp_adapter_name)
+        # model = model.merge_and_unload()
+    for n, m in model.named_modules():
+        if n.endswith("lora_A") or n.endswith("lora_B"):
+            m[adapter_name].weight.data -= m[init_suffix].weight.data
+        # if n.endswith("lora_A") or n.endswith("lora_B") or n.endswith("lora_dropout"):
+        #     m.pop("_init_lora_checkpoint")
+        # if isinstance(m, torch.nn.ModuleDict) and init_suffix in m.keys():
+        #     m.pop(init_suffix)
+    model.base_model.delete_adapter(init_suffix)
+    return model
+
+
+def merge_and_save_lora(model: PeftModel, tokenizer, save_dir: str):
+    model = model.merge_and_unload()
+    model.save_pretrained(save_dir)
+    tokenizer.save_pretrained(save_dir)
+    # del model, tokenizer
 
 
 class LoraGAContext:

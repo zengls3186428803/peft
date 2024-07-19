@@ -320,11 +320,13 @@ def set_peft_model_state_dict(
         PeftType.BOFT,
         PeftType.VERA,
         PeftType.FOURIERFT,
+        PeftType.LORAGA
     ):
         peft_model_state_dict = {}
         parameter_prefix = {
             PeftType.IA3: "ia3_",
             PeftType.LORA: "lora_",
+            PeftType.LORAGA: "lora_",
             PeftType.ADALORA: "lora_",
             PeftType.LOHA: "hada_",
             PeftType.LOKR: "lokr_",
@@ -368,7 +370,7 @@ def set_peft_model_state_dict(
                     " PRNG initialisation to restore these projections using `config.projection_prng_key`, which may"
                     " not be accurate on all system configurations."
                 )
-        elif config.peft_type == PeftType.LORA:
+        elif config.peft_type == PeftType.LORA or config.peft_type == PeftType.LORAGA:
             # Here we take care of a refactor of DoRA which changed lora_magnitude_vector from a ParameterDict to a
             # ModuleDict with a DoraLayer instance. The old parameter is now the "weight" attribute of that layer.
             old_dora_suffix = f"lora_magnitude_vector.{adapter_name}"

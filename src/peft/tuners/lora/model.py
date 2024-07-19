@@ -257,11 +257,11 @@ class LoraModel(BaseTuner):
                 weight = (
                     child.qweight
                     if hasattr(child, "qweight")
-                    else child.W_q
-                    if hasattr(child, "W_q")
-                    else child.weight
-                    if hasattr(child, "weight")
-                    else next(child.parameters())
+                    else (
+                        child.W_q
+                        if hasattr(child, "W_q")
+                        else child.weight if hasattr(child, "weight") else next(child.parameters())
+                    )
                 )
                 module.to(weight.device)
 
@@ -908,28 +908,43 @@ class LoraModel(BaseTuner):
                 )
 
         return tensors_lora
-    
 
 
 class LoraGAModel(LoraModel):
     def __init__(self, model, config, adapter_name):
         named_grad_key = "named_grad"
-        assert (hasattr(model, named_grad_key)
-                and getattr(model, named_grad_key) is not None), "no named_grad is specified"
-        self.named_grad = model.named_grad
-        model.named_grad = None
+        # assert (
+        #     hasattr(model, named_grad_key) and getattr(model, named_grad_key) is not None
+        # ), "no named_grad is specified"
+        self.named_grad = None
+        if hasattr(model, named_grad_key) and getattr(model, named_grad_key) is not None:
+            self.named_grad = getattr(model, "named_grad")
+
         super().__init__(model, config, adapter_name)
         self.named_grad = None
 
     def _create_and_replace(
-            self,
-            lora_config,
-            adapter_name,
-            target,
-            target_name,
-            parent,
-            current_key,
+        self,
+        lora_config,
+        adapter_name,
+        target,
+        target_name,
+        parent,
+        current_key,
     ):
+        yyy = hasattr(self, "named_grad")
+        # print(f"{lora_config.init_lora_weights},{yyy}")
+        if lora_config.init_lora_weights != "lora_ga" or self.named_grad is None:
+            # print("or_or_or")
+            super()._create_and_replace(
+                lora_config,
+                adapter_name,
+                target,
+                target_name,
+                parent,
+                current_key,
+            )
+            return
         if current_key is None:
             raise ValueError("Current Key shouldn't be `None`")
         # Regexp matching - Find key which matches current target_name in patterns provided
@@ -950,16 +965,8 @@ class LoraGAModel(LoraModel):
             "loaded_in_8bit": getattr(self.model, "is_loaded_in_8bit", False),
             "loaded_in_4bit": getattr(self.model, "is_loaded_in_4bit", False),
         }
-        if (lora_config.init_lora_weights == "lora_ga"
-                and hasattr(self.peft_config[adapter_name], "lora_ga_config")
-                and getattr(self.peft_config[adapter_name], "lora_ga_config", None) is not None):
-            kwargs.update(
-                {
-                    "peft_config": self.peft_config[adapter_name],
-                    "grad": self.named_grad[current_key]
-                }
-            )
-
+        if lora_config.init_lora_weights == "lora_ga" and self.named_grad is not None:
+            kwargs.update({"peft_config": self.peft_config[adapter_name], "grad": self.named_grad[current_key]})
         quant_methods = ["gptq", "aqlm", "awq"]
         for quant_method in quant_methods:
             quantization_config = get_quantization_config(self.model, method=quant_method)
@@ -985,4 +992,3 @@ class LoraGAModel(LoraModel):
                 # adding an additional adapter: it is not automatically trainable
                 new_module.requires_grad_(False)
             self._replace_module(parent, target_name, new_module, target)
-
