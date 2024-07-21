@@ -1,9 +1,29 @@
+from datetime import datetime, timedelta
+from functools import wraps
 from typing import Dict, List
 from accelerate import Accelerator
 import torch
 from tqdm import tqdm
 import torch.distributed as dist
 from peft import PeftModel
+
+
+def timer(data_format="ms"):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            begin_time = datetime.now()
+            result = func(*args, **kwargs)
+            end_time = datetime.now()
+            cost = (end_time - begin_time).seconds
+            print(
+                func.__name__ + " ran" + f" {cost // 60} min {cost % 60}s",
+            )
+            return result
+
+        return wrapper
+
+    return decorator
 
 
 def get_record_gradient_hook(model, record_dict):
@@ -20,6 +40,7 @@ def get_record_gradient_hook(model, record_dict):
     return record_gradient_hook
 
 
+@timer()
 def estimate_gradient(
     model,
     dataloader,
@@ -85,33 +106,17 @@ def estimate_gradient(
     return named_grads
 
 
-def save_peft_model_first(model: PeftModel, save_dir: str):
+@timer()
+def save_loraga_model_init(model: PeftModel, save_dir: str):
     import os
-    import json
 
     init_suffix = "_init_lora_checkpoint"
     save_dir = os.path.join(save_dir, init_suffix)
     model.save_pretrained(save_dir)
-    adapter_config = json.load(open(os.path.join(save_dir, "adapter_config.json")))
-    adapter_config["lora_alpha"] = adapter_config["lora_alpha"]
-    print(adapter_config)
-    json.dump(adapter_config, open(os.path.join(save_dir, "adapter_config.json"), "w"))
 
 
-def save_peft_model_second(model: PeftModel, save_dir: str):
-    import os
-    import json
-
-    final_suffix = "_final_lora_checkpoint"
-    save_dir = os.path.join(save_dir, final_suffix)
-    model.save_pretrained(save_dir)
-    adapter_config = json.load(open(os.path.join(save_dir, "adapter_config.json")))
-    adapter_config["lora_alpha"] = adapter_config["lora_alpha"]
-    print(adapter_config)
-    json.dump(adapter_config, open(os.path.join(save_dir, "adapter_config.json"), "w"))
-
-
-def load_peft_model(model: torch.nn.Module, save_dir: str, adapter_name=None):
+@timer()
+def load_loraga_model(model: torch.nn.Module, save_dir: str, adapter_name=None):
     import os
 
     init_suffix = "_init_lora_checkpoint"
@@ -142,11 +147,27 @@ def load_peft_model(model: torch.nn.Module, save_dir: str, adapter_name=None):
     return model
 
 
-def merge_and_save_lora(model: PeftModel, tokenizer, save_dir: str):
-    model = model.merge_and_unload()
+@timer()
+def save_loraga_model_final(model: PeftModel, save_dir: str):
+    import os
+    import shutil
+
+    init_suffix = "_init_lora_checkpoint"
+    final_suffix = "_final_lora_checkpoint"
+
+    tmp_save_dir = os.path.join(save_dir, final_suffix)
+    model.save_pretrained(tmp_save_dir)
+    model = load_loraga_model(model, save_dir)
+
+    tmp_save_dir = os.path.join(save_dir, init_suffix)
+    if os.path.exists(tmp_save_dir):
+        print(f"delete {tmp_save_dir}")
+        shutil.rmtree(tmp_save_dir)
+    tmp_save_dir = os.path.join(save_dir, final_suffix)
+    if os.path.exists(tmp_save_dir):
+        print(f"delete {tmp_save_dir}")
+        shutil.rmtree(tmp_save_dir)
     model.save_pretrained(save_dir)
-    tokenizer.save_pretrained(save_dir)
-    # del model, tokenizer
 
 
 class LoraGAContext:

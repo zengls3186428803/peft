@@ -1,12 +1,10 @@
 import torch
-from peft import LoraGAConfig, get_peft_model
-from peft.utils.lora_ga_utils import estimate_gradient, LoraGAContext
-from peft.utils.lora_ga_utils.lora_ga_utils import (
-    save_peft_model_first,
-    save_peft_model_second,
-    load_peft_model,
-    merge_and_save_lora,
-)
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+from peft import PeftModel, LoraGAConfig, get_peft_model
+from peft.utils.lora_ga_utils import estimate_gradient, LoraGAContext, save_loraga_model_init, save_loraga_model_final
+
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 from accelerate import Accelerator
 from utils import transform_dataset, initialize_text_to_text_model, find_all_linear_modules
 from data import DATASET_MAP
@@ -45,19 +43,23 @@ def main():
         accelerator=accelerator,
         quant_flag=False,
     )
+    print(peft_config)
     with LoraGAContext(model=model, named_grad=named_grad):
-        print(peft_config)
         model = get_peft_model(model=model, peft_config=peft_config)
-    print("finish get_peft_model=================================================")
     save_dir = "snapshot"
-    save_peft_model_first(model=model, save_dir=save_dir)
-    save_peft_model_second(model=model, save_dir=save_dir)
-    model, tokenizer = initialize_text_to_text_model(model_id, model_type, model_dtype, flash_attention=True)
-    model = load_peft_model(model=model, save_dir=save_dir, adapter_name="default")
+    save_loraga_model_init(model=model, save_dir=save_dir)
+    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    print("finish get_peft_model=================================================")
+    """
+    train peft model
+    """
+    # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    save_loraga_model_final(model=model, save_dir=save_dir)
     # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+    model, tokenizer = initialize_text_to_text_model(model_id, model_type, model_dtype, flash_attention=True)
+    model = PeftModel.from_pretrained(model, save_dir)
     print(model)
-    model.set_adapter("default")
-    merge_and_save_lora(model=model, tokenizer=tokenizer, save_dir=save_dir + "/test")
 
 
 if __name__ == "__main__":
