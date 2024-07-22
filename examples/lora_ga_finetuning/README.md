@@ -1,41 +1,32 @@
-# LoRA-GA: Low-Rank Adaptation with Gradient Approximation
-
-- [LoRA-GA: Low-Rank Adaptation with Gradient Approximation](#lora-ga-low-rank-adaptation-with-gradient-approximation)
-  - [introduction paper,code](#introduction-papercode)
-  - [preparation](#preparation)
-  - [quick start](#quick-start)
-  - [What exactly does the above code do?](#what-exactly-does-the-above-code-do)
-  - [examples](#examples)
-  - [detail usage of functions and classes](#detail-usage-of-functions-and-classes)
-    - [LoraGAConfig](#loragaconfig)
-    - [estimate\_gradient](#estimate_gradient)
-    - [LoraGAContext](#loragacontext)
+- [Preparation](#preparation)
+- [Quick start](#quick-start)
+- [What exactly does the above code do?](#what-exactly-does-the-above-code-do)
+- [Why do we need to save the model twice?](#why-do-we-need-to-save-the-model-twice)
+- [Examples](#examples)
+- [Detail usage of functions and classes](#detail-usage-of-functions-and-classes)
+  - [LoraGAConfig](#loragaconfig)
+  - [estimate\_gradient](#estimate_gradient)
+  - [LoraGAContext](#loragacontext)
   - [save\_loraga\_model\_init](#save_loraga_model_init)
   - [save\_loraga\_model\_final](#save_loraga_model_final)
-  - [Why do we need to save the model twice?](#why-do-we-need-to-save-the-model-twice)
-  - [for quantization model](#for-quantization-model)
-    - [lora](#lora)
-    - [lora-ga](#lora-ga)
-    - [Reason for offload](#reason-for-offload)
-    - [offload method](#offload-method)
-  - [citation](#citation)
+- [For quantization model](#for-quantization-model)
+  - [LoRA](#lora)
+  - [LoRA-GA](#lora-ga)
+  - [Reason for offload](#reason-for-offload)
+  - [Offload method](#offload-method)
+- [Citation](#citation)
 
-## introduction [paper](https://arxiv.org/abs/2407.05000),[code](https://github.com/Outsider565/LoRA-GA)
+## Preparation
 
-[LoRA-GA](https://arxiv.org/abs/2407.05000) aligns the gradients of low-rank matrix product with those of full fine-tuning at the first step. Our extensive experiments demonstrate that LoRA-GA achieves a convergence rate comparable to that of full fine-tuning (hence being significantly faster than vanilla LoRA as well as various recent improvements) while simultaneously attaining comparable or even better performance.
-
-## preparation
+Clone the LoRA-GA repository and install custom `peft`:
 
 ```bash
-   git clone https://github.com/Outsider565/LoRA-GA.git
-   cd LoRA-GA
-   git submodule init
-   git submodule update peft
-   cd peft
-   pip install -e .
+git clone https://github.com/Outsider565/LoRA-GA.git
+cd LoRA-GA
+pip install -e peft
 ```
 
-## quick start
+## Quick start
 
 ```python
 from peft import PeftModel, get_peft_model, LoraGAConfig,
@@ -63,32 +54,67 @@ train model
 
 save_loraga_model_final(model, save_dir=save_dir)
 # after save_loraga_model_final, you can load it just like you load lora model
-PeftModel.from_pretrained(model, save_dir)
+model = PeftModel.from_pretrained(model, save_dir)
 ```
 
 ## What exactly does the above code do?
 
-1. LoraGAConfig is subclass of LoraConfig. LoraGAConfig will set peft_type to PeftType.LORAGA and init_lora_weights = "lora_ga".
+1. `LoraGAConfig` is subclass of `LoraConfig`. `LoraGAConfig` will set `peft_type` to `PeftType.LORAGA` and `init_lora_weights` = "lora_ga".
 
-2. estimate_gradient will use the data in the dataloader for forward and backward propagation, and return a dictionary named_grad. The key of this dictionary belongs to the submodule name of the model, and the value is the gradient of the weight W of the corresponding module.
+2. `estimate_gradient` will use the data in the dataloader for forward and backward propagation, and return a dictionary named_grad. The key of this dictionary belongs to the submodule name of the model, and the value is the gradient of the weight W of the corresponding module.
 
-3. LoraGAContext will attach named_grad to model as an attribute of model. named_grad will pass named_grad to LoraGAModel which is a subclass of LoraModel. After using named_grad to initialize LoraGAModel(LoraModel), LoraGAModel frees it.
+3. `LoraGAContext` will attach named_grad to model as an attribute of model. named_grad will pass named_grad to `LoraGAModel` which is a subclass of LoraModel. After using named_grad to initialize `LoraGAModel(LoraModel)`, `LoraGAModel` frees it.
 
-after you get_peft_model, you can use your peft model as lora model to finetune
+After you use `get_peft_model` to initialize the model, you can fine-tune the PEFT model in the same way you would with a standard LoRA model.
 
-## examples
+## Why do we need to save the model twice?
 
-1. [example of float model](./float_llama2-7b_metamath.py)
+When LoRA-GA initialization is performed, the weight W is modified as follows:
 
-2. [example of quantized model](./quant_llama-2-7b_metamath.py)
+$$W_{init}=W_{pre\_trained}-\eta B_{init} A_{init}$$.
 
-## detail usage of functions and classes
+Obtain $W_{init}, A_{init}, B_{init}$ after LoRA-GA initialization.
+
+Obtain $W_{init}, A_{final}, B_{final}$ after the train the peft model.
+
+However, PEFT models only save the weights of the adapters. Therefore, to correctly capture the changes in the LoRA adapters during training, we need to save:
+$$A_{final}-A_{init}$$
+and
+$$B_{final} - B_{init}$$.
+
+So you need to save the init adapter after `get_peft_model` (`save_loraga_model_init`), and then save the $final-init$ adapter after fine-tuning (`save_loraga_model_final`).
+
+## Examples
+
+1. [Example of float model](./float_llama2-7b_metamath.py)
+
+2. [Example of quantized model](./quant_llama-2-7b_metamath.py)
+
+## Detail usage of functions and classes
 
 ### LoraGAConfig
 
-```
+```python
 @dataclass
 class LoraGAConfig(LoraConfig):
+    """
+    Configuration for the LoRA-GA (Low-Rank Adaptation with Gradient Adjustment) model.
+
+    This class extends `LoraConfig` to include additional parameters specific to LoRA-GA.
+    It sets the `peft_type` to `PeftType.LORAGA` and initializes the LoRA weights with the "lora_ga" strategy.
+
+    Attributes:
+        bsz (int): The batch size used during gradient estimation. Defaults to 2.
+        iters (int): The number of iterations (batches) for gradient estimation. Defaults to 2.
+        direction (str): The direction for LoRA-GA adaptation. Defaults to "ArB2r".
+        max_length (str): The maximum length for input sequences. Defaults to 1024.
+        dtype (str): The data type for the model parameters. Defaults to "fp32".
+        scale (str): The scaling method for gradients. Defaults to "stable".
+        stable_gamma (int): The gamma parameter for stable scaling. Defaults to 16.
+
+    Methods:
+        __post_init__: Initializes `peft_type` to `PeftType.LORAGA` and `init_lora_weights` to "lora_ga".
+    """
     bsz: int = field(
         default=2,
     )
@@ -115,10 +141,6 @@ class LoraGAConfig(LoraConfig):
         self.init_lora_weights = "lora_ga"
 ```
 
-dataset of dataloader passed to estimate_gradient should satisfy that:
-size of dataset should equal to $bsz * iters$
-bsz is batch_size, iters is the number of batches.
-
 ### estimate_gradient
 
 ```python
@@ -132,27 +154,46 @@ def estimate_gradient(
     no_split_module_classes=None,
 ) -> Dict[str, List[torch.Tensor]]:
     """
-    Estimate the gradient of the model on the given dataset
+    Estimates the gradients of a model's parameters over a dataset.
+
+    Args:
+        model (torch.nn.Module): The model whose gradients will be estimated.
+        dataloader (torch.utils.data.DataLoader): The dataloader for the dataset.
+        accelerator (Accelerator): The accelerator used for training.
+        quant_flag (bool, optional): If True, quantizes the model parameters. Defaults to False.
+        origin_type (str, optional): The original data type of the model parameters. Defaults to "bf16".
+        quant_type (str, optional): The data type for quantizing the model parameters. Defaults to "nf4".
+        no_split_module_classes (list of type, optional): List of module classes that should not be split during offloading. Defaults to None.
+
+    Returns:
+        Dict[str, List[torch.Tensor]]: A dictionary mapping parameter names to their estimated gradients.
     """
 ```
 
-notice that model should always float model.
+Notice that the model should always be a floating-point model.
 
-if you use float model, you can(should) set quant_flag to Flase to get named_grad faster, but you can also set quant_flag to false to reduce memory overhead(At the same time, increase the time the function runs, because this offload part of model to cpu to make the gpu consumption of the estimated gradient not greater than the gpu memory occupied by the quantized model training later)
-if quant_flag is set to False,the three arguments "origin_type, quant_type,no_split_module_classes" will not have any effect.
+If you use a floating-point model, you can (and should) set `quant_flag` to False to get faster named gradients. However, you can also set `quant_flag` to False to reduce memory overhead. This approach might increase the time the function runs because it offloads part of the model to the CPU, ensuring that GPU consumption for estimating gradients does not exceed the GPU memory occupied by the quantized model training.
 
-if you want to pass quantized model to "get_peft_model", you should specify origin_type and quant_type.Currently supported origin types are fp32, bf16 and Currently supported quant types are bitsandbytes int8 and nf4.
+If `quant_flag` is set to False, the three arguments `origin_type`, `quant_type`, and `no_split_module_classes` will not have any effect.
 
-no_split_module_classes is used to partition the model. for exmaple it can be residual block, default value is
-["LlamaDecoderLayer", "GPT2TransformerBlock", "T5Block", "GPT2Block", "FlaxGPT2Block",]
-if you should set no_split_module_classes to your blockname if your model is not in default list.
+If you want to pass a quantized model to `get_peft_model`, you should specify `origin_type` and `quant_type`. Currently, supported `origin_type` are fp32 and bf16, and supported `quant_type` are bitsandbytes int8 and nf4.
+
+The `no_split_module_classes` argument is used to partition the model. For example, it can include residual blocks. The default value is `["LlamaDecoderLayer", "GPT2TransformerBlock", "T5Block", "GPT2Block", "FlaxGPT2Block"]`. You should set `no_split_module_classes` to your block name if your model is not in the default list.
 
 ### LoraGAContext
 
 ```python
 class LoraGAContext:
     """
-    Attach named_grad to the model as an attribute of the model
+    Context manager for attaching and detaching a named gradient dictionary to a model.
+
+    This context manager allows you to temporarily attach a dictionary of named gradients
+    to the model as an attribute. Upon entering the context, the `named_grad` dictionary
+    is set as an attribute of the model. Upon exiting the context, the attribute is removed.
+
+    Attributes:
+        model (torch.nn.Module): The model to which the gradient dictionary will be attached.
+        named_grad (dict, optional): A dictionary where keys are parameter names and values are gradients. Defaults to None.
     """
 
     def __init__(
@@ -171,67 +212,81 @@ class LoraGAContext:
             delattr(self.model, "named_grad")
 ```
 
-LoraGAContext will attach named_grad to model as an attribute of model. named_grad will pass named_grad to LoraGAModel which is a subclass of LoraModel. After using named_grad to initialize LoraGAModel(LoraModel), LoraGAModel free named_grad
+`LoraGAContext` will attach named_grad to model as an attribute of model. named_grad will pass named_grad to `LoraGAModel` which is a subclass of `LoraModel`. After using named_grad to initialize `LoraGAModel(LoraModel)`, `LoraGAModel` free named_grad.
 
-## save_loraga_model_init
+### save_loraga_model_init
 
 ```python
 def save_loraga_model_init(model: PeftModel, save_dir: str):
+    """
+    Saves the initial state of a PEFT model with LoRA (Low-Rank Adaptation) layers to a specified directory.
+
+    Args:
+        model (PeftModel): The PEFT model to be saved.
+        save_dir (str): The directory where the model will be saved.
+    """
 ```
 
-save $A_{init}$ and $B_{init}$
+Save $A_{init}$ and $B_{init}$
 
-## save_loraga_model_final
+### save_loraga_model_final
 
 ```python
 def save_loraga_model_final(model: PeftModel, save_dir: str):
+    """
+    Saves the final state of a PEFT (Parameter-Efficient Fine-Tuning) model with LoRA (Low-Rank Adaptation) layers and performs cleanup.
+
+    Args:
+        model (PeftModel): The PEFT model to be saved.
+        save_dir (str): The directory where the model checkpoints will be saved.
+
+    Notes:
+        This function saves the model state with the suffix `_final_lora_checkpoint`,
+        loads the model from the directory to apply updates, and then deletes both the
+        initial and final checkpoint directories. The model is saved again to the
+        provided `save_dir` after cleanup.
+    """
 ```
 
-save $A_{final}$ and $B_{final}$
+1. Save $A_{final}$ and $B_{final}$
 
-load $A_{init}$ and $B_{init}$ to init_adapter
+2. Load $A_{init}$ and $B_{init}$ to init_adapter
 
-load $A_{final}$ and $B_{init}$ to init_adapter
+3. Load $A_{final}$ and $B_{init}$ to init_adapter
 
-final - init
+4. Get final_adapter - init_adapter
 
-delete init_adapter
+5. Delete checkpoint of init_adapter and checkpoint of final_adapter
 
-## Why do we need to save the model twice?
+6. Save (final-init) adapter
 
-when lora-ga initialization is executed, W will be modify:
-$$W_{init}=W_{pre\_trained}-\eta B A$$
-get $W_{init}, A_{init}, B_{init}$ after LoRA-GA initialization
+## For quantization model
 
-get $W_{init}, A_{final}, B_{final}$ after the train the peft model
+For quantized model, `estimated_gradient` will spend more time. The reason is below
 
-but peft only save weight of adapter, so we need to save $A_{final}-A_{init}$ and $B_{final} - B_{init}$
-
-## for quantization model
-
-for quantized model, estimated_gradient function will spend more time. The reason is below
-
-### lora
+### LoRA
 
 $W=W0+\alpha AB$
 
-### lora-ga
+### LoRA-GA
 
-lora-ga needs to get the partial derivative of loss with respect to W (equivalent to W0),
-but the W0 of the quantized model is stored in integer format,
-and pytorch does not support obtaining gradients for integer data.
-So please ensure that model passed to estimate_gradient should always float model.
+LoRA-GA needs to obtain the partial derivative of the loss with respect to W (equivalent to W0).
+
+However, the W0 of the quantized model is stored in integer format,
+
+and PyTorch does not support obtaining gradients for integer data.
+
+Therefore, please ensure that the model passed to `estimate_gradient` is always a floating-point model.
 
 ### Reason for offload
 
-In order to get the derivative of loss with respect to W, the original floating-point model
-needs to be used to estimate the gradient.
+To obtain the derivative of the loss with respect to W, the original floating-point model needs to be used to estimate the gradient.
 
-In order to make the gpu consumption of the estimated gradient not greater than the gpu memory occupied by the quantized model training later, it is necessary to offload part of the model to the cpu when estimating the gradient.
+To ensure that the GPU consumption for `estimate_gradient` does not exceed the GPU memory occupied by the quantized model during training, it is necessary to offload part of the model to the CPU when estimating the gradient.
 
-### offload method
+### Offload method
 
-```pytoon
+```python
 Initial: Model on the cpu
 
 Divide the model into K blocks.
@@ -251,11 +306,11 @@ for i in range(K-1, -1, -1):
         # If it is not the 0th block, offload the i-th block to the cpu
         offload the i-th block to the cpu
     else：
-        # If it is block 0, since the forward of the next batch first requires block 0 to be forwarded, no offload
+        # If it is block 0, since the forward of the next batch first requires block 0 to be forwarded, no offload is needed
         do nothing
 ```
 
-## citation
+## Citation
 
 ```
 @misc{wang2024loragalowrankadaptationgradient,
