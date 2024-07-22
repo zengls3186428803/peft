@@ -4,16 +4,28 @@ from .forward_backward_offload import ForwardBackwardOffloadHookContext
 
 class ModelOffloadHookContext:
     def __init__(
-            self,
-            model,
-            no_split_module_classes=None,
-            num_block: int = 2,
-            enable=True,
-            # =========================
-            device="cuda",
-            strategy="block",
-            with_backward_hook=False
+        self,
+        model,
+        no_split_module_classes=None,
+        num_block: int = 2,
+        enable=True,
+        # =========================
+        device="cuda",
+        strategy="block",
+        with_backward_hook=False,
     ):
+        """
+        Initializes the ModelOffloadHookContext to manage offloading of model computations and saved tensors.
+
+        Args:
+            model (torch.nn.Module): The model to which the hooks will be applied.
+            no_split_module_classes (list of type, optional): List of module classes that should not be split during offloading. Defaults to None.
+            num_block (int, optional): The number of blocks to use when the strategy is set to "block". Defaults to 2.
+            enable (bool, optional): If True, enables the hook. Defaults to True.
+            device (str, optional): The device to which activations and gradients will be offloaded. Defaults to "cuda".
+            strategy (str, optional): The offloading strategy to use. Options are "module" or "block". Defaults to "block".
+            with_backward_hook (bool, optional): If True, enables the backward hook for debugging purposes. Defaults to False.
+        """
         self.enable = enable
         if not enable:
             return

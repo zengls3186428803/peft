@@ -6,9 +6,21 @@ import torch
 from tqdm import tqdm
 import torch.distributed as dist
 from peft import PeftModel
+import os
 
 
 def timer(data_format="ms"):
+    """
+    A decorator that prints the execution time of a function.
+
+    Args:
+        data_format (str, optional): The format in which to display the execution time. Defaults to "ms".
+                                     (Note: The current implementation only prints time in minutes and seconds.)
+
+    Returns:
+        function: The decorated function with execution time logging.
+    """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -27,6 +39,14 @@ def timer(data_format="ms"):
 
 
 def get_record_gradient_hook(model, record_dict):
+    """
+    Creates a hook to record the gradients of a model's parameters into a dictionary.
+
+    Args:
+        model (torch.nn.Module): The model whose gradients will be recorded.
+        record_dict (dict): A dictionary to store the recorded gradients.
+    """
+
     def record_gradient_hook(grad):
         for n, p in model.named_parameters():
             if p.requires_grad and p.grad is not None:
@@ -50,8 +70,20 @@ def estimate_gradient(
     quant_type="nf4",
     no_split_module_classes=None,
 ) -> Dict[str, List[torch.Tensor]]:
-    r"""
-    Estimate the gradient of the model on the given dataset
+    """
+    Estimates the gradients of a model's parameters over a dataset.
+
+    Args:
+        model (torch.nn.Module): The model whose gradients will be estimated.
+        dataloader (torch.utils.data.DataLoader): The dataloader for the dataset.
+        accelerator (Accelerator): The accelerator used for training.
+        quant_flag (bool, optional): If True, quantizes the model parameters. Defaults to False.
+        origin_type (str, optional): The original data type of the model parameters. Defaults to "bf16".
+        quant_type (str, optional): The data type for quantizing the model parameters. Defaults to "nf4".
+        no_split_module_classes (list of type, optional): List of module classes that should not be split during offloading. Defaults to None.
+
+    Returns:
+        Dict[str, List[torch.Tensor]]: A dictionary mapping parameter names to their estimated gradients.
     """
     if accelerator and model.device.type != "cuda":
         if not quant_flag:
@@ -108,7 +140,13 @@ def estimate_gradient(
 
 @timer()
 def save_loraga_model_init(model: PeftModel, save_dir: str):
-    import os
+    """
+    Saves the initial state of a PEFT model with LoRA (Low-Rank Adaptation) layers to a specified directory.
+
+    Args:
+        model (PeftModel): The PEFT model to be saved.
+        save_dir (str): The directory where the model will be saved.
+    """
 
     init_suffix = "_init_lora_checkpoint"
     save_dir = os.path.join(save_dir, init_suffix)
@@ -117,7 +155,17 @@ def save_loraga_model_init(model: PeftModel, save_dir: str):
 
 @timer()
 def load_loraga_model(model: torch.nn.Module, save_dir: str, adapter_name=None):
-    import os
+    """
+    Loads a PEFT (Parameter-Efficient Fine-Tuning) model with LoRA (Low-Rank Adaptation) layers from a saved directory.
+
+    Args:
+        model (torch.nn.Module): The model to which the saved state will be loaded.
+        save_dir (str): The directory containing the saved checkpoints.
+        adapter_name (str, optional): The name of the adapter to use for loading the model. Defaults to None, in which case "default" is used.
+
+    Returns:
+        torch.nn.Module: The model with the loaded LoRA adapters.
+    """
 
     init_suffix = "_init_lora_checkpoint"
     final_suffix = "_final_lora_checkpoint"
@@ -149,6 +197,19 @@ def load_loraga_model(model: torch.nn.Module, save_dir: str, adapter_name=None):
 
 @timer()
 def save_loraga_model_final(model: PeftModel, save_dir: str):
+    """
+    Saves the final state of a PEFT (Parameter-Efficient Fine-Tuning) model with LoRA (Low-Rank Adaptation) layers and performs cleanup.
+
+    Args:
+        model (PeftModel): The PEFT model to be saved.
+        save_dir (str): The directory where the model checkpoints will be saved.
+
+    Notes:
+        This function saves the model state with the suffix `_final_lora_checkpoint`,
+        loads the model from the directory to apply updates, and then deletes both the
+        initial and final checkpoint directories. The model is saved again to the
+        provided `save_dir` after cleanup.
+    """
     import os
     import shutil
 
@@ -172,7 +233,15 @@ def save_loraga_model_final(model: PeftModel, save_dir: str):
 
 class LoraGAContext:
     """
-    Attach named_grad to the model as an attribute of the model
+    Context manager for attaching and detaching a named gradient dictionary to a model.
+
+    This context manager allows you to temporarily attach a dictionary of named gradients
+    to the model as an attribute. Upon entering the context, the `named_grad` dictionary
+    is set as an attribute of the model. Upon exiting the context, the attribute is removed.
+
+    Attributes:
+        model (torch.nn.Module): The model to which the gradient dictionary will be attached.
+        named_grad (dict, optional): A dictionary where keys are parameter names and values are gradients. Defaults to None.
     """
 
     def __init__(

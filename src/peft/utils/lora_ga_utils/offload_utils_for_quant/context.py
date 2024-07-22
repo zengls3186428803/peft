@@ -16,6 +16,18 @@ class OffloadContext:
             no_split_module_classes=None,
             enable_gradient_offload=True,
     ):
+        """Offload part of model to cpu.
+
+        Args:
+            model (torch.nn.Module): Model to be offloaded
+            named_grads (dict): Contains the name and gradient of the corresponding module.
+            quant_flag (bool, optional): Whether to quantize the model. Defaults to False.
+            origin_type (str, optional): Origin dtype of model. Defaults to "bf16".
+            quant_type (str, optional): Quantizaion dtype. Defaults to "int8".
+            no_split_module_classes (_type_, optional):  no_split_module_classes is an option you can set to ensure that
+              certain classes of modules are not split during the offload process. Defaults to None.
+            enable_gradient_offload (bool, optional): Whether to use this context. Defaults to True.
+        """
         if no_split_module_classes is None:
             no_split_module_classes = [
                 "LlamaDecoderLayer", "GPT2TransformerBlock", "T5Block", "GPT2Block", "FlaxGPT2Block",

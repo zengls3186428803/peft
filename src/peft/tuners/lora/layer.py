@@ -170,7 +170,6 @@ class LoraLayer(BaseTunerLayer):
 
     def lora_ga_init(self, adapter_name):
         if "grad" not in self.kwargs.keys():
-            # print(f"grad not in self.kwargs.keys(), kwargs={self.kwargs}")
             return
         base_layer = self.get_base_layer()
         weight = self.get_base_layer().weight

@@ -10,6 +10,15 @@ class GradientOffloadHookContext:
             *args,
             **kwargs,
     ):
+        """Offload gradient to cpu
+
+        Args:
+            model (torch.nn.Module): The model whose gradients will be offloaded.
+            record_dict (dict): A dictionary to record offloaded gradient (named_grad)
+            enable (bool, optional): If True, enables the gradient offloading. Defaults to True.
+            *args: Additional arguments.
+            **kwargs: Additional keyword arguments.
+        """
 
         if enable:
             self.gradient_device = "cpu"

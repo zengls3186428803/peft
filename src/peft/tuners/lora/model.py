@@ -257,11 +257,11 @@ class LoraModel(BaseTuner):
                 weight = (
                     child.qweight
                     if hasattr(child, "qweight")
-                    else (
-                        child.W_q
-                        if hasattr(child, "W_q")
-                        else child.weight if hasattr(child, "weight") else next(child.parameters())
-                    )
+                    else child.W_q
+                    if hasattr(child, "W_q")
+                    else child.weight
+                    if hasattr(child, "weight")
+                    else next(child.parameters())
                 )
                 module.to(weight.device)
 
@@ -911,11 +911,19 @@ class LoraModel(BaseTuner):
 
 
 class LoraGAModel(LoraModel):
+    """
+    Creates Low Rank Adapter (LoRA) with Gradient Approximation  model (LoRA-GA) from a pretrained transformers model.
+    The method is described in detail in https://arxiv.org/abs/2407.05000
+    Args:
+        model ([`torch.nn.Module`]): The model to be adapted.
+        config ([`LoraConfig`]): The configuration of the Lora model.
+        adapter_name (`str`): The name of the adapter, defaults to `"default"`.
+    Returns:
+        `torch.nn.Module`: The Lora model.
+    """
+
     def __init__(self, model, config, adapter_name):
         named_grad_key = "named_grad"
-        # assert (
-        #     hasattr(model, named_grad_key) and getattr(model, named_grad_key) is not None
-        # ), "no named_grad is specified"
         self.named_grad = None
         if hasattr(model, named_grad_key) and getattr(model, named_grad_key) is not None:
             self.named_grad = getattr(model, "named_grad")
@@ -932,10 +940,7 @@ class LoraGAModel(LoraModel):
         parent,
         current_key,
     ):
-        yyy = hasattr(self, "named_grad")
-        # print(f"{lora_config.init_lora_weights},{yyy}")
         if lora_config.init_lora_weights != "lora_ga" or self.named_grad is None:
-            # print("or_or_or")
             super()._create_and_replace(
                 lora_config,
                 adapter_name,

@@ -5,30 +5,30 @@ from .forward_hook import ForwardHookForDevice
 
 
 class ForwardBackwardOffloadHookContext(ForwardHookForDevice):
-    mode = "release",  # enum["debug","release"]
+    mode = ("release",)  # enum["debug","release"]
 
     def __init__(
-            self,
-            model,
-            offload_proportion=0.5,
-            device="cuda",
-            no_split_module_classes=None,
-            with_backward_hook=False,  # for debug
-            enable=True,
-            num_block: int = 2,
-            strategy="block",  # enum["module","block"],
+        self,
+        model,
+        offload_proportion=0.5,
+        device="cuda",
+        no_split_module_classes=None,
+        with_backward_hook=False,  # for debug
+        enable=True,
+        num_block: int = 2,
+        strategy="block",  # enum["module","block"],
     ):
-        """
+        """Offload model during forward and backward.
+
         Args:
-            model: torch.nn.Module
-            offload_proportion: The proportion of modules offloaded to the CPU, only for strategy="module"
-            device: The name of the device that performs the actual operation
-            no_split_module_classes: Modules that should not be split
-            with_backward_hook: backward hook for debug, release version should be False
-            enable: Decide whether to enable this context manager
-            num_block: The number of blocks the model is divided into. If it is divided into k blocks,
-                        then only 1/K of the total number of parameters reside on the GPU.
-            strategy: It is recommended to use strategy="block"
+            model (torch.nn.Module): The model to which the hook will be applied.
+            offload_proportion (float, optional): The proportion of activations to offload. Defaults to 0.5.
+            device (str, optional): The device to which activations will be offloaded. Defaults to "cuda".
+            no_split_module_classes (list of type, optional): List of module classes that should not be split during offloading. Defaults to None.
+            with_backward_hook (bool, optional): If True, enables the backward hook for debugging purposes. Defaults to False.
+            enable (bool, optional): If True, enables the hook. Defaults to True.
+            num_block (int, optional): The number of blocks to use when the strategy is set to "block". Defaults to 2.
+            strategy (str, optional): The offloading strategy to use. Options are "module" or "block". Defaults to "block".
         """
         self.enable = enable
         if not enable:
@@ -46,7 +46,7 @@ class ForwardBackwardOffloadHookContext(ForwardHookForDevice):
         if ForwardBackwardOffloadHookContext.mode == "debug":
             print(f"module_list:{self.module_list}")
         if self.strategy == "module":
-            self.offload_list = self.module_list[:int(offload_proportion * len(self.module_list))]
+            self.offload_list = self.module_list[: int(offload_proportion * len(self.module_list))]
             if ForwardBackwardOffloadHookContext.mode == "debug":
                 print(f"self.offload_list={self.offload_list}")
         elif self.strategy == "block":
@@ -78,7 +78,7 @@ class ForwardBackwardOffloadHookContext(ForwardHookForDevice):
         for handle in self.handle_list:
             handle.remove()
 
-    def register_hook_by_block(self, module: torch.nn.Module, parent_name=''):
+    def register_hook_by_block(self, module: torch.nn.Module, parent_name=""):
         if self.with_backward_hook and parent_name in self.module_list:
             handle = module.register_full_backward_pre_hook(hook=self.get_backward_hook(pre=True))
             self.handle_list.append(handle)
@@ -110,7 +110,7 @@ class ForwardBackwardOffloadHookContext(ForwardHookForDevice):
             return
 
         for name, sub_module in module.named_children():
-            full_name = f'{parent_name}.{name}' if parent_name else name
+            full_name = f"{parent_name}.{name}" if parent_name else name
             self.register_hook_by_block(sub_module, full_name)
 
     @staticmethod
@@ -125,7 +125,8 @@ class ForwardBackwardOffloadHookContext(ForwardHookForDevice):
 
         def pre_hook_with_kwargs(module, args, kwargs):
             if ForwardBackwardOffloadHookContext.mode == "debug":
-                from tools_for_quant_offload.resource_monitor import show_gpu_and_cpu_memory
+                from .resource_monitor import show_gpu_and_cpu_memory
+
                 show_gpu_and_cpu_memory()
             # model
             module.to(device)
@@ -190,13 +191,17 @@ class ForwardBackwardOffloadHookContext(ForwardHookForDevice):
     def get_backward_hook(pre=True):
         def pre_hook(module, grad_output):
             if ForwardBackwardOffloadHookContext.mode == "debug":
-                from tools_for_quant_offload.resource_monitor import show_gpu_and_cpu_memory
+                from .resource_monitor import show_gpu_and_cpu_memory
+
                 show_gpu_and_cpu_memory()
                 pass
             return grad_output
 
         def after_hook(module, grad_input, grad_output):
             if ForwardBackwardOffloadHookContext.mode == "debug":
+                from .resource_monitor import show_gpu_and_cpu_memory
+
+                show_gpu_and_cpu_memory()
                 pass
             return grad_input
 
@@ -205,7 +210,7 @@ class ForwardBackwardOffloadHookContext(ForwardHookForDevice):
         else:
             return after_hook
 
-    def register_forward_hook_by_module(self, module: torch.nn.Module, parent_name=''):
+    def register_forward_hook_by_module(self, module: torch.nn.Module, parent_name=""):
         if ForwardBackwardOffloadHookContext.mode == "debug":
             print(f"register_forward_hook_by_module(self, module, parent_name={parent_name}")
         if self.with_backward_hook and parent_name in self.module_list:
@@ -234,7 +239,7 @@ class ForwardBackwardOffloadHookContext(ForwardHookForDevice):
             self.handle_list.append(handle)
             return
         for name, sub_module in module.named_children():
-            full_name = f'{parent_name}.{name}' if parent_name else name
+            full_name = f"{parent_name}.{name}" if parent_name else name
             self.register_forward_hook_by_module(sub_module, full_name)
 
     @staticmethod
@@ -255,10 +260,12 @@ class ForwardBackwardOffloadHookContext(ForwardHookForDevice):
             for i in range(n_module):
                 module_name = block["module_list"][i]
                 module_info[module_name] = dict()
-                module_info[module_name].update({
-                    "first_block_flag": block["first_block_flag"],
-                    "last_block_flag": block["last_block_flag"],
-                    "first_module_flag": True if i == 0 else False,
-                    "last_module_flag": True if i == (n_module - 1) else False,
-                })
+                module_info[module_name].update(
+                    {
+                        "first_block_flag": block["first_block_flag"],
+                        "last_block_flag": block["last_block_flag"],
+                        "first_module_flag": True if i == 0 else False,
+                        "last_module_flag": True if i == (n_module - 1) else False,
+                    }
+                )
         return module_info
