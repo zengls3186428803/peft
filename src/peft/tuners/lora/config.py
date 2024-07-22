@@ -23,7 +23,6 @@ from peft.config import PeftConfig
 from peft.utils import PeftType
 
 
-
 @dataclass
 class LoraRuntimeConfig:
     """
@@ -194,7 +193,9 @@ class LoraConfig(PeftConfig):
             "the final layer `classifier/score` are randomly initialized and as such need to be trainable and saved."
         },
     )
-    init_lora_weights: bool | Literal["gaussian", "olora", "pissa", "pissa_niter_[number of iters]", "loftq", "lora_ga"] = field(
+    init_lora_weights: (
+        bool | Literal["gaussian", "olora", "pissa", "pissa_niter_[number of iters]", "loftq", "lora_ga"]
+    ) = field(
         default=True,
         metadata={
             "help": (
@@ -375,6 +376,23 @@ class LoraConfig(PeftConfig):
 
 @dataclass
 class LoraGAConfig(LoraConfig):
+    """
+    Configuration for the LoraGA (Lora Gradient Alignment) approach.
+
+    This class extends the LoraConfig base class to include additional parameters
+    specific to the LoraGA method. It manages hyperparameters for training and
+    gradient alignment settings.
+
+    Attributes:
+        bsz (int): The batch size for training. Default is 2.
+        iters (int): The number of iterations for training. Default is 2.
+        direction (str): The direction of gradient alignment. Default is "ArB2r".
+        max_length (int): The maximum sequence length for inputs. Default is 1024.
+        dtype (str): The data type used for computations. Default is "fp32".
+        scale (str): Scaling method for gradients. Default is "stable".
+        stable_gamma (int): Gamma value used for stable scaling. Default is 16.
+    """
+
     bsz: int = field(
         default=2,
     )
