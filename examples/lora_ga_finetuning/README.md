@@ -69,6 +69,8 @@ After you use `get_peft_model` to initialize the model, you can fine-tune the PE
 
 ## Why do we need to save the model twice?
 
+![](../resource/pic/lora_ga_algo.png)
+
 When LoRA-GA initialization is performed, the weight W is modified as follows:
 
 $$W_{init}=W_{pre\_trained}-\eta B_{init} A_{init}$$.
@@ -78,9 +80,8 @@ Obtain $W_{init}, A_{init}, B_{init}$ after LoRA-GA initialization.
 Obtain $W_{init}, A_{final}, B_{final}$ after the train the peft model.
 
 However, PEFT models only save the weights of the adapters. Therefore, to correctly capture the changes in the LoRA adapters during training, we need to save:
-$$A_{final}-A_{init}$$
-and
-$$B_{final} - B_{init}$$.
+$$B_{final}A_{final}-B_{init}A_{init}$$
+
 
 So you need to save the init adapter after `get_peft_model` (`save_loraga_model_init`), and then save the $final-init$ adapter after fine-tuning (`save_loraga_model_final`).
 
@@ -119,7 +120,7 @@ class LoraGAConfig(LoraConfig):
         default=2,
     )
     iters: int = field(
-        default=2,
+        default=64,
     )
     direction: str = field(
         default="ArB2r",
