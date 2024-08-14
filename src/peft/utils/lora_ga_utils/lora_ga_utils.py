@@ -130,10 +130,10 @@ def estimate_gradient(
     if accelerator and accelerator.num_processes > 1:
         accelerator.wait_for_everyone()
         accelerator.print("Gradient estimation finished, gathering results")
-        for _, processed_gradient in tqdm(named_grads.items(), desc="Gathering gradient"):
+        for name, processed_gradient in tqdm(named_grads.items(), desc="Gathering gradient"):
             processed_gradient = processed_gradient.to(accelerator.device)
             dist.all_reduce(processed_gradient, op=dist.ReduceOp.AVG)
-            processed_gradient = processed_gradient.to("cpu")
+            named_grads[name] = processed_gradient.to("cpu")
     named_grads = {".".join(k.split(".")[:-1]): v for k, v in named_grads.items()}
     return named_grads
 
@@ -148,51 +148,9 @@ def save_loraga_model_init(model: PeftModel, save_dir: str):
         save_dir (str): The directory where the model will be saved.
     """
 
-    init_suffix = "_init_lora_checkpoint"
+    init_suffix = "init_lora_checkpoint"
     save_dir = os.path.join(save_dir, init_suffix)
     model.save_pretrained(save_dir)
-
-
-@timer()
-def load_loraga_model(model: torch.nn.Module, save_dir: str, adapter_name=None):
-    """
-    Loads a PEFT (Parameter-Efficient Fine-Tuning) model with LoRA (Low-Rank Adaptation) layers from a saved directory.
-
-    Args:
-        model (torch.nn.Module): The model to which the saved state will be loaded.
-        save_dir (str): The directory containing the saved checkpoints.
-        adapter_name (str, optional): The name of the adapter to use for loading the model. Defaults to None, in which case "default" is used.
-
-    Returns:
-        torch.nn.Module: The model with the loaded LoRA adapters.
-    """
-
-    init_suffix = "_init_lora_checkpoint"
-    final_suffix = "_final_lora_checkpoint"
-    merged_suffix = "merged_checkpoint"
-    if adapter_name == None:
-        adapter_name = "default"
-    save_dirs = [f"{save_dir}/{i}" for i in os.listdir(save_dir) if merged_suffix not in i]
-    for save_dir in save_dirs:
-        dir_name = os.path.split(save_dir)[-1]
-        if dir_name == init_suffix:
-            tmp_adapter_name = dir_name
-        elif dir_name == final_suffix:
-            tmp_adapter_name = adapter_name
-        else:
-            continue
-        print(f"loading and from {save_dir}, adapter_name={tmp_adapter_name}")
-        model: PeftModel = PeftModel.from_pretrained(model, save_dir, adapter_name=tmp_adapter_name)
-        # model = model.merge_and_unload()
-    for n, m in model.named_modules():
-        if n.endswith("lora_A") or n.endswith("lora_B"):
-            m[adapter_name].weight.data -= m[init_suffix].weight.data
-        # if n.endswith("lora_A") or n.endswith("lora_B") or n.endswith("lora_dropout"):
-        #     m.pop("_init_lora_checkpoint")
-        # if isinstance(m, torch.nn.ModuleDict) and init_suffix in m.keys():
-        #     m.pop(init_suffix)
-    model.base_model.delete_adapter(init_suffix)
-    return model
 
 
 @timer()
@@ -203,32 +161,19 @@ def save_loraga_model_final(model: PeftModel, save_dir: str):
     Args:
         model (PeftModel): The PEFT model to be saved.
         save_dir (str): The directory where the model checkpoints will be saved.
-
-    Notes:
-        This function saves the model state with the suffix `_final_lora_checkpoint`,
-        loads the model from the directory to apply updates, and then deletes both the
-        initial and final checkpoint directories. The model is saved again to the
-        provided `save_dir` after cleanup.
     """
     import os
     import shutil
 
-    init_suffix = "_init_lora_checkpoint"
-    final_suffix = "_final_lora_checkpoint"
+    init_suffix = "init_lora_checkpoint"
 
-    tmp_save_dir = os.path.join(save_dir, final_suffix)
-    model.save_pretrained(tmp_save_dir)
-    model = load_loraga_model(model, save_dir)
+    tmp_save_dir = save_dir
+    model.save_pretrained(tmp_save_dir, path_initial_model_for_weight_conversion=os.path.join(save_dir, init_suffix))
 
     tmp_save_dir = os.path.join(save_dir, init_suffix)
     if os.path.exists(tmp_save_dir):
         print(f"delete {tmp_save_dir}")
         shutil.rmtree(tmp_save_dir)
-    tmp_save_dir = os.path.join(save_dir, final_suffix)
-    if os.path.exists(tmp_save_dir):
-        print(f"delete {tmp_save_dir}")
-        shutil.rmtree(tmp_save_dir)
-    model.save_pretrained(save_dir)
 
 
 class LoraGAContext:

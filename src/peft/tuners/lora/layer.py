@@ -169,8 +169,23 @@ class LoraLayer(BaseTunerLayer):
             nn.init.normal_(self.lora_embedding_B[adapter_name])
 
     def lora_ga_init(self, adapter_name):
+        def get_float_weight(model: torch.nn.Module):
+            model: torch.nn.Linear
+
+            device = model.weight.device
+            in_features = model.in_features
+            with torch.no_grad():
+                I = torch.eye(in_features).to(device)
+                w = model(I)
+                if hasattr(model, "bias") and isinstance(model.bias, torch.Tensor):
+                    w -= model.bias
+                w = torch.transpose(w, 0, 1)
+            w.requires_grad = model.weight.requires_grad
+            return w
+        
         if "grad" not in self.kwargs.keys():
             return
+
         base_layer = self.get_base_layer()
         weight = self.get_base_layer().weight
         device = weight.device
@@ -182,12 +197,7 @@ class LoraLayer(BaseTunerLayer):
             which may take 1-2 minutes (7bmodel, all linear)
             """
             quant_flag = True
-            with torch.no_grad():
-                I = torch.eye(base_layer.in_features, device=device)
-                weight = base_layer(I)
-                if base_layer.bias is not None and isinstance(base_layer.bias, torch.Tensor):
-                    weight -= base_layer.bias
-                weight = torch.transpose(weight, 0, 1)
+            weight = get_float_weight(base_layer)
             dtype = weight.dtype
         grad = self.kwargs["grad"].to(device).to(torch.float32)
         weight = weight.to(torch.float32)
@@ -211,6 +221,15 @@ class LoraLayer(BaseTunerLayer):
         elif init_config.direction == "ArB2r":
             B = U[:, lora_r: 2 * lora_r]
             A = V[:lora_r, :]
+        elif init_config.direction == "random":
+            import random
+            random_list = random.sample(range(2 * lora_r), 2 * lora_r)
+            indexes_A = random_list[0:lora_r]
+            indexes_B = random_list[lora_r:2 * lora_r]
+            print(f"indexes_A={indexes_A}")
+            print(f"indexes_B={indexes_B}")
+            B = U[:, indexes_B]
+            A = V[indexes_A, :]
         scaling_factor = self.scaling["default"]
         if init_config.scale == "gd":
             A = A / scaling_factor

@@ -397,7 +397,7 @@ class LoraGAConfig(LoraConfig):
         default=2,
     )
     iters: int = field(
-        default=2,
+        default=64,
     )
     direction: str = field(
         default="ArB2r",
